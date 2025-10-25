@@ -143,7 +143,7 @@ void get_msg_text(DWORD dw_error, char **pnc_msg) {
     FormatMessage(dw_flags, NULL, dw_error, LANG_SYSTEM_DEFAULT, (LPTSTR)pnc_msg, 0, NULL);
 }
 
-void *get_in_addr(struct sockaddr *sa) {
+void* get_in_addr(struct sockaddr *sa) {
     if (sa -> sa_family == AF_INET) {
         return &(((struct sockaddr_in*)sa)->sin_addr);
     }
