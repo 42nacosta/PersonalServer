@@ -40,9 +40,9 @@ int main(int argc, char *argv[]) {
     SOCKET sockfd;
     int i_status;
     DWORD dw_status;
-    struct thread_info as_thread[BACKLOG];
+    struct thread_info as_threads[BACKLOG];
     HANDLE h_thread;
-    DWORD dw_thred_id;
+    DWORD dw_thread_id;
     WSADATA s_wsaData;
     BOOL B_yes = TRUE;
 
@@ -100,8 +100,100 @@ int main(int argc, char *argv[]) {
         }
 
         i_status = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&B_yes, sizeof(B_yes));
+
+        if (i_status = SOCKET_ERROR) {
+            dw_error = (DWORD)WSAGetLastError();
+            get_msg_text(dw_error, &nc_error);
+            fprintf(stderr,"setsockopt failed with code %ld.\n",dw_error);
+            fprintf(stderr,"%s\n",nc_error);
+            LocalFree(nc_error);
+            closesocket(sockfd);
+            freeaddrinfo(ps_servinfo);
+            WSACleanup();
+
+            return 4;
+        }
+
+        i_addrlen = (int) ps_address->ai_addrlen;
+        i_status = bind(sockfd, ps_address->ai_addr, i_addrlen);
+
+        if (i_status = SOCKET_ERROR) {
+            dw_error = (DWORD)WSAGetLastError();
+            get_msg_text(dw_error, &nc_error);
+            fprintf(stderr,"setsockopt failed with code %ld.\n",dw_error);
+            fprintf(stderr,"%s\n",nc_error);
+            LocalFree(nc_error);
+            closesocket(sockfd);
+            freeaddrinfo(ps_servinfo);
+            WSACleanup();
+
+            return 4;
+        }
+
+        break;
     }
 
+    if (ps_address == NULL) {
+        dw_error = (DWORD)WSAGetLastError();
+        get_msg_text(dw_error, &nc_error);
+        fprintf(stderr,"listen failed with code %ld.\n",dw_error);
+        fprintf(stderr,"%s\n",nc_error);
+        LocalFree(nc_error);
+        closesocket(sockfd);
+        freeaddrinfo(ps_servinfo);
+        WSACleanup();
+
+        return 6;
+    }
+
+    freeaddrinfo(ps_servinfo);
+    printf("Waiting for connection ... \n");
+
+    while (1) {
+        if (active_thread_count(as_threads) < BACKLOG) {
+            sin_size = sizeof(s_client);
+            new_fd = accept(sockfd, (struct sockaddr*) &s_client, &sin_size);
+
+            if (new_fd == INVALID_SOCKET) {
+                dw_error = WSAGetLastError();
+                get_msg_text(dw_error, &nc_error);
+                printf(stderr, "accept failed with code %d\n", dw_error);
+                printf(stderr, "%s\n", nc_error);
+                LocalFree(nc_error);
+            }
+            else {
+                inet_ntop(s_client.ss_family, get_in_addr((struct sockaddr *)&s_client), ac_server, sizeof(ac_server));
+                printf("Got connection from %s\n", ac_server);
+
+                add_socket_to_thread_list(new_fd, as_threads, &i_location);
+                h_thread = CreateThread(NULL, 0, thread_function, (void *)&(as_threads[i_location].new_fd), 0, &dw_thread_id);
+                as_threads[i_location].h_thread = h_thread;
+
+                if (h_thread == NULL) {
+                    dw_error = WSAGetLastError();
+                    get_msg_text(dw_error, &nc_error);
+                    fprintf(stderr,"CreateThread failed with code %ld.\n",dw_error);
+                    fprintf(stderr,"%s\n",nc_error);
+                    closesocket(new_fd);
+                }
+            }
+        }
+        else {
+            fprintf(stderr,"Connection refused.  Backlog is full.\n");
+        }
+
+        for (i_lc = 0; i_lc < BACKLOG; i_lc++) {
+            if (as_threads[i_lc].h_thread != NULL) {
+                dw_status = WaitForSingleObject(as_threads[i_lc].h_thread, 0);
+
+                if (dw_status == WAIT_OBJECT_0) {
+                    CloseHandle(as_threads[i_lc].h_thread);
+                    as_threads[i_lc].h_thread = NULL;
+                }
+            }
+        }
+    }
+    return 7;
 }
 int active_thread_count (struct thread_info *ns_threads) {
     int i_count;
